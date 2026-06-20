@@ -1,0 +1,42 @@
+window.AQI_DATA = {
+  current: {
+    value: 65,
+    pm25: 20,
+    pm10: 38,
+    level: "普通",
+    advice: "校園周邊空氣品質普通，系統會優先避開車流較多的外側道路。"
+  },
+  nodeMap: {
+    M_DORM: 66,
+    F_DORM: 67,
+    ACTIVITY: 63,
+    COMPLEX: 62,
+    EVERLIGHT: 68,
+    BASKETBALL: 71,
+    TENNIS: 70,
+    FIELD: 72,
+    MOLECULAR: 60,
+    CHEM: 61,
+    LIBRARY: 58,
+    ADMIN: 59,
+    ART: 60,
+    COMMON: 58,
+    DESIGN: 64,
+    HISTORY: 59,
+    RED: 60,
+    MSE: 62,
+    CIVIL: 64,
+    PIONEER: 66,
+    GUANGHUA: 65,
+    FIRST: 61,
+    SECOND: 60,
+    THIRD: 59,
+    FOURTH: 62,
+    SIXTH: 63,
+    SYS: 64,
+    MRT: 70,
+    YB_MRT: 70,
+    YB_MAIN: 67,
+    YB_JIANGUO: 69
+  }
+};

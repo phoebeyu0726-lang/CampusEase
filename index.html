@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CampusEase 校園易行｜Smart Campus Navigation System</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="site-header">
+      <a class="brand" href="#dashboard" data-view-target="dashboard" aria-label="回到首頁">
+        <img class="brand-logo" src="logo.png" alt="CampusEase 校園易行 Logo">
+        <strong class="brand-name">CampusEase 校園易行</strong>
+      </a>
+      <nav class="main-nav" aria-label="主要頁面">
+        <button class="nav-item active" data-view="dashboard" type="button">首頁</button>
+        <button class="nav-item" data-view="result" type="button">路線結果</button>
+        <button class="nav-item" data-view="compare" type="button">路線比較</button>
+        <button class="nav-item" data-view="live" type="button">即時資訊</button>
+        <button class="nav-item" data-view="explore" type="button">校園介紹</button>
+        <button class="nav-item" data-view="favorites" type="button">我的最愛</button>
+        <button class="nav-item" data-view="data" type="button">資料展示</button>
+      </nav>
+      <div class="header-status">
+        <span id="rainBadge">降雨 21%</span>
+        <span id="aqiBadge">AQI 65</span>
+        <span id="tempBadge">27°C</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="screen active" id="dashboard">
+        <section class="planner-map-panel">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Map Preview</p>
+            </div>
+            <button class="ghost-action" data-view-target="explore" type="button">查看校園介紹</button>
+          </div>
+          <div class="map-canvas planner-map" aria-label="北科大地圖預覽">
+            <img class="campus-map-img" src="地圖.png" alt="北科大校園地圖">
+            <svg id="plannerRouteSvg" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <div id="plannerNodeLayer"></div>
+          </div>
+        </section>
+
+        <div class="dashboard-grid">
+          <section class="panel route-planner">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Route Planner</p>
+                <h2>路線規劃</h2>
+              </div>
+            </div>
+
+            <div class="quick-demo-row">
+              <button class="mode-button" data-mode="fastest" type="button">最近路線</button>
+              <button class="mode-button" data-mode="accessible" type="button">無障礙路線</button>
+              <button class="mode-button active" data-mode="comfort" type="button">最舒適路線</button>
+              <button class="mode-button" data-mode="bike" type="button">Youbike</button>
+            </div>
+
+            <div class="form-grid">
+              <label for="startSelect">起點</label>
+              <select id="startSelect"></select>
+              <label for="endSelect">終點</label>
+              <select id="endSelect"></select>
+            </div>
+
+            <input type="checkbox" id="accessibleToggle" hidden>
+
+            <button class="primary-action" id="calculateBtn" type="button">計算路線</button>
+          </section>
+
+        </div>
+      </section>
+
+      <section class="screen" id="result">
+        <div class="route-layout">
+          <section class="panel map-panel">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Route Result</p>
+                <h2 id="routeTitle">路線結果</h2>
+              </div>
+              <div class="action-row">
+                <button class="secondary-action" data-view-target="compare" type="button">比較模式</button>
+                <button class="secondary-action" id="saveRouteBtn" type="button">加入最愛</button>
+              </div>
+            </div>
+
+            <div class="map-canvas result-map">
+              <img class="campus-map-img" src="地圖.png" alt="北科大校園地圖">
+              <svg id="routeSvg" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <div id="nodeLayer"></div>
+              <aside class="map-popover" id="mapPopover" aria-live="polite"></aside>
+            </div>
+
+            <div class="legend-row">
+              <span><i class="legend route"></i>完整路線</span>
+              <span><i class="legend active"></i>目前段落</span>
+              <span><i class="legend start"></i>起點門口</span>
+              <span><i class="legend end"></i>終點門口</span>
+              <span><i class="legend bike"></i>YouBike</span>
+            </div>
+
+            <div class="segment-guide">
+              <button id="routePrevStepBtn" type="button">上一段</button>
+              <div>
+                <span id="segmentCounter">第 1 段</span>
+                <strong id="segmentInstruction">尚未計算路線</strong>
+                <small id="segmentTurnHint">按下一段可逐步查看要走的路。</small>
+              </div>
+              <button id="routeNextStepBtn" type="button">下一段</button>
+            </div>
+          </section>
+
+          <aside class="panel result-panel">
+            <section class="score-card">
+              <span>幸福指數</span>
+              <strong id="happyScore">--</strong>
+              <small id="scoreLabel">等待計算</small>
+            </section>
+
+            <section class="panel-block">
+              <h2>推薦方案</h2>
+              <p class="mode-note" id="routeModeNote">不同模式會使用不同權重計算。</p>
+              <p id="routeSummary" class="route-summary">請先在首頁選擇起點與終點。</p>
+              <ol id="routeSteps" class="route-steps"></ol>
+            </section>
+
+            <section class="info-grid">
+              <div><span>預估時間</span><strong id="routeTimeInfo">--</strong></div>
+              <div><span>距離</span><strong id="routeDistanceInfo">--</strong></div>
+              <div><span>室內遮蔽</span><strong id="routeRainInfo">--</strong></div>
+              <div><span>遮陽程度</span><strong id="routeShadeInfo">--</strong></div>
+            </section>
+
+            <details class="reveal-block" open>
+              <summary>環境與交通資訊</summary>
+              <div class="info-grid">
+                <div><span>天氣</span><strong id="weatherInfo">--</strong></div>
+                <div><span>AQI</span><strong id="aqiInfo">--</strong></div>
+                <div><span>YouBike</span><strong id="bikeInfo">--</strong></div>
+                <div><span>無障礙</span><strong id="accessInfo">--</strong></div>
+              </div>
+            </details>
+
+            <details class="reveal-block" open>
+              <summary>路線提醒</summary>
+              <div class="alert-list" id="routeAlerts"></div>
+            </details>
+
+            <section class="measure-card">
+              <span>距離評估</span>
+              <strong id="measureInfo">--</strong>
+              <small>一般路線不會穿過沒有門的建築；室內穿越只會發生在有兩個以上門口的建築。</small>
+            </section>
+
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen" id="compare">
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Route Compare</p>
+            <h2>不同需求的路線比較</h2>
+          </div>
+          <button class="secondary-action" data-view-target="result" type="button">回到結果</button>
+        </div>
+        <div class="compare-card-grid" id="compareCards"></div>
+      </section>
+
+      <section class="screen" id="live">
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Live Info</p>
+            <h2>即時環境資訊</h2>
+          </div>
+          <button class="secondary-action" id="refreshLiveBtn" type="button">更新時間</button>
+        </div>
+        <div class="metric-grid">
+          <article class="metric-card blue"><span>天氣</span><strong>27°C</strong><small>多雲時晴</small></article>
+          <article class="metric-card"><span>AQI</span><strong>65</strong><small>普通</small></article>
+          <article class="metric-card orange"><span>曝曬風險</span><strong>中</strong><small>球場與運動場較高</small></article>
+          <article class="metric-card green"><span>YouBike</span><strong>3 站</strong><small>可作為起點或終點</small></article>
+        </div>
+        <section class="panel live-map-panel">
+          <div class="map-canvas live-map">
+            <img class="campus-map-img" src="地圖.png" alt="北科大校園地圖">
+          </div>
+        </section>
+        <p class="update-note" id="liveUpdatedTime">最後更新：尚未更新</p>
+      </section>
+
+      <section class="screen" id="explore">
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Campus Explorer</p>
+            <h2>校園介紹與無障礙設施</h2>
+          </div>
+          <span class="pill">點選地圖定位點查看資訊</span>
+        </div>
+        <div class="explore-layout">
+          <section class="panel explore-map-panel">
+            <div class="map-canvas explore-map">
+              <img class="campus-map-img" src="地圖.png" alt="北科大校園地圖">
+              <div id="exploreNodeLayer"></div>
+            </div>
+          </section>
+          <aside class="panel explore-detail" id="exploreDetail">
+            <span>尚未選擇</span>
+            <strong>點選地圖上的定位點</strong>
+            <p>此頁目前主要呈現無障礙設施與可使用門口，讓一般使用者不需要看到背後規則。</p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen" id="favorites">
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Favorite Routes</p>
+            <h2>我的最愛路線</h2>
+          </div>
+        </div>
+        <div class="favorite-list">
+          <article class="favorite-item">
+            <span class="favorite-icon green">舒</span>
+            <div><strong>男生宿舍 → 第一教學大樓</strong><small>最舒適路線</small></div>
+            <button class="favorite-load" data-start="M_DORM" data-end="FIRST" data-mode-target="comfort" type="button">載入</button>
+          </article>
+          <article class="favorite-item">
+            <span class="favorite-icon blue">You</span>
+            <div><strong>捷運忠孝新生站 → 最近 YouBike</strong><small>YouBike 接駁</small></div>
+            <button class="favorite-load" data-start="MRT" data-end="LIBRARY" data-mode-target="bike" type="button">載入</button>
+          </article>
+          <article class="favorite-item">
+            <span class="favorite-icon purple">無</span>
+            <div><strong>捷運忠孝新生站 → 第二教學大樓</strong><small>無障礙路線</small></div>
+            <button class="favorite-load" data-start="MRT" data-end="SECOND" data-mode-target="accessible" type="button">載入</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="screen" id="data">
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Data Structure Demo</p>
+            <h2>資料結構如何影響導航</h2>
+          </div>
+          <button class="secondary-action" id="showDfdBtn" type="button">查看 DFD</button>
+        </div>
+        <div class="data-layout">
+          <section class="panel data-tabs-card">
+            <button class="data-tab active" data-tab="graph" type="button">Graph</button>
+            <button class="data-tab" data-tab="hash" type="button">Hash Map</button>
+            <button class="data-tab" data-tab="dijkstra" type="button">Dijkstra</button>
+            <button class="data-tab" data-tab="astar" type="button">A*</button>
+          </section>
+          <section class="panel code-panel">
+            <h2 id="dataTitle">Graph</h2>
+            <pre id="dataContent"></pre>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="dfdDialog">
+    <div class="dialog-head">
+      <h2>DFD 架構圖</h2>
+      <button id="closeDfdBtn" type="button" aria-label="關閉">×</button>
+    </div>
+    <img src="DFD.jpg" alt="幸福通勤導航 DFD 架構圖">
+  </dialog>
+
+  <script src="data/campusGraph.js"></script>
+  <script src="data/weatherData.js"></script>
+  <script src="data/aqiData.js"></script>
+  <script src="data/youbikeData.js"></script>
+  <script src="data/accessibilityData.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
