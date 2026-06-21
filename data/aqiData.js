@@ -16,6 +16,7 @@ window.AQI_DATA = {
     TENNIS: 70,
     FIELD: 72,
     MOLECULAR: 60,
+    CHEMENG: 61,
     CHEM: 61,
     LIBRARY: 58,
     ADMIN: 59,

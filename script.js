@@ -57,6 +57,7 @@ const plannerNodeLayer = document.querySelector("#plannerNodeLayer");
 function init() {
   fillSelects();
   bindEvents();
+  enhanceSegmentGuide();
   setupMapZoomControls();
   startSelect.value = state.start;
   endSelect.value = state.end;
@@ -94,7 +95,7 @@ function bindEvents() {
       state.needs.bike = state.mode === "bike";
       accessibleToggle.checked = state.needs.accessible;
       syncNeedCheckboxes();
-      calculateAndRender();
+      calculateAndRender({ resetStep: true });
     });
   });
 
@@ -113,7 +114,7 @@ function bindEvents() {
       state.needs.bike = state.mode === "bike";
       accessibleToggle.checked = state.needs.accessible;
       syncNeedCheckboxes();
-      calculateAndRender();
+      calculateAndRender({ resetStep: true });
       showView("result");
     });
   });
@@ -129,24 +130,24 @@ function bindEvents() {
   startSelect.addEventListener("change", () => {
     state.start = startSelect.value;
     state.plannerPick = "end";
-    calculateAndRender();
+    calculateAndRender({ resetStep: true });
   });
 
   endSelect.addEventListener("change", () => {
     state.end = endSelect.value;
     state.plannerPick = "start";
-    calculateAndRender();
+    calculateAndRender({ resetStep: true });
   });
 
   accessibleToggle.addEventListener("change", () => {
     state.needs.accessible = accessibleToggle.checked;
     if (accessibleToggle.checked) setMode("accessible");
     syncNeedCheckboxes();
-    calculateAndRender();
+    calculateAndRender({ resetStep: true });
   });
 
   document.querySelector("#calculateBtn").addEventListener("click", () => {
-    calculateAndRender();
+    calculateAndRender({ resetStep: true });
     showView("result");
   });
 
@@ -154,10 +155,49 @@ function bindEvents() {
   document.querySelector("#refreshLiveBtn")?.addEventListener("click", refreshLiveInfo);
   document.querySelector("#nextStepBtn")?.addEventListener("click", () => moveNavigationStep(1));
   document.querySelector("#prevStepBtn")?.addEventListener("click", () => moveNavigationStep(-1));
-  document.querySelector("#routeNextStepBtn")?.addEventListener("click", () => moveNavigationStep(1));
+  document.querySelector("#routeNextStepBtn")?.addEventListener("click", handleRouteNextStep);
   document.querySelector("#routePrevStepBtn")?.addEventListener("click", () => moveNavigationStep(-1));
   document.querySelector("#showDfdBtn")?.addEventListener("click", () => document.querySelector("#dfdDialog").showModal());
   document.querySelector("#closeDfdBtn")?.addEventListener("click", () => document.querySelector("#dfdDialog").close());
+}
+
+function enhanceSegmentGuide() {
+  const guide = document.querySelector(".segment-guide");
+  const prevButton = document.querySelector("#routePrevStepBtn");
+  const nextButton = document.querySelector("#routeNextStepBtn");
+  const counter = document.querySelector("#segmentCounter");
+  const instruction = document.querySelector("#segmentInstruction");
+  const hint = document.querySelector("#segmentTurnHint");
+  if (!guide || !prevButton || !nextButton || !counter || !instruction || !hint || guide.dataset.enhanced) return;
+
+  const main = document.createElement("div");
+  main.className = "segment-main";
+
+  const statusRow = document.createElement("div");
+  statusRow.className = "segment-status-row";
+
+  const liveStatus = document.createElement("span");
+  liveStatus.className = "nav-live-status";
+  liveStatus.textContent = "即時導航";
+
+  const progress = document.createElement("div");
+  progress.className = "segment-progress";
+  progress.setAttribute("aria-hidden", "true");
+
+  const progressBar = document.createElement("span");
+  progressBar.id = "segmentProgressBar";
+  progress.appendChild(progressBar);
+
+  statusRow.append(counter, liveStatus);
+  main.append(statusRow, instruction, hint, progress);
+
+  prevButton.classList.add("nav-step-button", "prev");
+  nextButton.classList.add("nav-step-button", "next");
+  prevButton.innerHTML = '<span class="nav-step-icon" aria-hidden="true"></span><span>上一段</span>';
+  nextButton.innerHTML = '<span>下一段</span><span class="nav-step-icon" aria-hidden="true"></span>';
+
+  guide.replaceChildren(prevButton, main, nextButton);
+  guide.dataset.enhanced = "true";
 }
 
 function setupMapZoomControls() {
@@ -214,7 +254,7 @@ function applyRouteNeeds() {
   else if (state.needs.bike) setMode("bike");
   else if (state.needs.rain || state.needs.heat) setMode("comfort");
   updatePreferenceLabels();
-  calculateAndRender();
+  calculateAndRender({ resetStep: true });
 }
 
 function setMode(mode) {
@@ -222,6 +262,14 @@ function setMode(mode) {
   state.needs.accessible = mode === "accessible";
   state.needs.bike = mode === "bike";
   accessibleToggle.checked = state.needs.accessible;
+  const isBikeMode = mode === "bike";
+  document.querySelector(".route-planner")?.classList.toggle("bike-mode", isBikeMode);
+  document.querySelector(".planner-map-panel")?.classList.toggle("bike-mode", isBikeMode);
+  if (endSelect) {
+    endSelect.disabled = isBikeMode;
+    endSelect.setAttribute("aria-hidden", String(isBikeMode));
+  }
+  document.querySelector(".end-field-label")?.setAttribute("aria-hidden", String(isBikeMode));
   document.querySelectorAll(".mode-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === mode);
   });
@@ -292,6 +340,7 @@ function dijkstraRoute(start, end, mode) {
     visited.add(current);
 
     graph[current].forEach((edge) => {
+      if (isSchoolGateNode(current) || isSchoolGateNode(edge.to)) return;
       if (forceAccessible && (!edge.accessible || edge.hasStairs)) return;
       if (mode !== "fastest" && (!edge.accessible || edge.hasStairs)) return;
       const nextDistance = distances[current] + getEdgeWeight(current, edge, mode);
@@ -341,12 +390,39 @@ function isRoadNode(id) {
   return routeNodes[id]?.type === "road";
 }
 
+function isSchoolGateNode(id) {
+  return /^GATE_/.test(id);
+}
+
 function shouldShowRouteMarker(id, index, path) {
   const node = routeNodes[id];
   if (!node) return false;
   if (index === 0 || index === path.length - 1) return true;
   if (index === state.navIndex || index === state.navIndex + 1) return true;
   return node.type !== "road";
+}
+
+function getRouteMarkerDisplayNode(id) {
+  const node = routeNodes[id];
+  if (!node) return null;
+  const parentId = node.parent || id;
+  const location = locations[parentId];
+  if (location && node.type !== "road") {
+    return {
+      ...location,
+      parentId,
+      routeNodeId: id,
+      routeType: node.type,
+      isLocationCenter: true
+    };
+  }
+  return {
+    ...node,
+    parentId,
+    routeNodeId: id,
+    routeType: node.type,
+    isLocationCenter: false
+  };
 }
 
 function getBuildingName(id) {
@@ -376,7 +452,7 @@ function getNavigationTitle(from, to, edge, index) {
   return getTurnHint(index);
 }
 
-function calculateAndRender() {
+function calculateAndRender(options = {}) {
   const effectiveEnd = getEffectiveEndLocation(state.start, state.mode);
   const route = {
     ...resolveBestRoute(state.start, effectiveEnd, state.mode),
@@ -386,7 +462,11 @@ function calculateAndRender() {
   state.lastPath = route.path;
   state.lastMetrics = metrics;
   state.lastRouteMeta = route;
-  state.navIndex = Math.max(0, Math.min(state.navIndex, Math.max(0, route.path.length - 2)));
+  if (options.resetStep) {
+    state.navIndex = 0;
+  } else {
+    state.navIndex = Math.max(0, Math.min(state.navIndex, Math.max(0, route.path.length - 2)));
+  }
   renderPlannerMap();
   renderMap(route.path);
   renderResult(route.path, metrics, route);
@@ -436,21 +516,24 @@ function renderPlannerMap() {
   if (!plannerNodeLayer || !plannerRouteSvg) return;
   plannerNodeLayer.innerHTML = "";
   plannerRouteSvg.innerHTML = "";
+  const autoBikeEnd = state.mode === "bike" ? getEffectiveEndLocation(state.start, state.mode) : state.end;
 
   Object.entries(locations).forEach(([id, node]) => {
-    if (id !== state.start && id !== state.end) return;
+    if (id !== state.start && id !== autoBikeEnd) return;
     const button = document.createElement("button");
     button.type = "button";
     button.className = `planner-node ${node.type === "bike" ? "bike" : ""}`;
     button.dataset.label = node.name;
     button.style.left = `${node.x}%`;
     button.style.top = `${node.y}%`;
-    button.classList.toggle("selected", id === state.start || id === state.end);
+    button.classList.toggle("selected", id === state.start || id === autoBikeEnd);
     button.classList.toggle("start", id === state.start);
-    button.classList.toggle("end", id === state.end);
+    button.classList.toggle("end", id === autoBikeEnd);
     button.title = node.name;
     button.addEventListener("click", () => {
-      if (state.plannerPick === "start") {
+      if (state.mode === "bike") {
+        state.start = id;
+      } else if (state.plannerPick === "start") {
         state.start = id;
         state.plannerPick = "end";
       } else {
@@ -459,7 +542,7 @@ function renderPlannerMap() {
       }
       startSelect.value = state.start;
       endSelect.value = state.end;
-      calculateAndRender();
+      calculateAndRender({ resetStep: true });
     });
     plannerNodeLayer.appendChild(button);
   });
@@ -481,12 +564,14 @@ function renderMap(path) {
   path.forEach((id, index) => {
     if (!shouldShowRouteMarker(id, index, path)) return;
     const node = routeNodes[id];
+    const displayNode = getRouteMarkerDisplayNode(id);
+    if (!node || !displayNode) return;
     const marker = document.createElement("button");
     marker.type = "button";
-    marker.className = `map-node ${node.type === "bike" ? "bike" : ""} ${node.type === "door" ? "door" : ""} ${node.type === "road" ? "road" : ""}`;
-    marker.style.left = `${node.x}%`;
-    marker.style.top = `${node.y}%`;
-    marker.title = node.name;
+    marker.className = `map-node ${displayNode.type === "bike" ? "bike" : ""} ${node.type === "door" ? "location" : ""} ${node.type === "road" ? "road" : ""}`;
+    marker.style.left = `${displayNode.x}%`;
+    marker.style.top = `${displayNode.y}%`;
+    marker.title = displayNode.name;
     marker.classList.toggle("start", index === 0);
     marker.classList.toggle("end", index === path.length - 1);
     marker.addEventListener("click", () => showMapPopover(id));
@@ -651,7 +736,7 @@ function renderComparison() {
       state.needs.bike = mode === "bike";
       accessibleToggle.checked = state.needs.accessible;
       syncNeedCheckboxes();
-      calculateAndRender();
+      calculateAndRender({ resetStep: true });
       showView("result");
     });
     compareCards?.appendChild(card);
@@ -761,16 +846,37 @@ function moveNavigationStep(delta) {
   renderNavigation();
 }
 
+function handleRouteNextStep() {
+  if (!state.lastPath.length) return;
+  const segmentCount = Math.max(1, state.lastPath.length - 1);
+  if (state.navIndex >= segmentCount - 1) {
+    state.navIndex = 0;
+    renderSegmentGuide();
+    showView("dashboard");
+    return;
+  }
+  moveNavigationStep(1);
+}
+
 function renderSegmentGuide() {
   const counter = document.querySelector("#segmentCounter");
   const instruction = document.querySelector("#segmentInstruction");
   const hint = document.querySelector("#segmentTurnHint");
   const prevButton = document.querySelector("#routePrevStepBtn");
   const nextButton = document.querySelector("#routeNextStepBtn");
+  const progressBar = document.querySelector("#segmentProgressBar");
+  const guide = document.querySelector(".segment-guide");
   if (!counter || !instruction || !hint || state.lastPath.length < 2) {
     if (counter) counter.textContent = "尚未產生路線";
     if (instruction) instruction.textContent = "請選擇不同的起點與終點";
     if (hint) hint.textContent = "起點與終點相同時不會產生導航段落。";
+    if (progressBar) progressBar.style.width = "0%";
+    if (guide) guide.classList.remove("crossing", "indoor");
+    if (nextButton) {
+      nextButton.disabled = true;
+      nextButton.classList.remove("finish");
+      nextButton.innerHTML = '<span>下一段</span><span class="nav-step-icon" aria-hidden="true"></span>';
+    }
     return;
   }
   const segmentCount = Math.max(1, state.lastPath.length - 1);
@@ -781,8 +887,20 @@ function renderSegmentGuide() {
   counter.textContent = `第 ${index + 1} 段 / 共 ${segmentCount} 段`;
   instruction.textContent = `${routeNodes[from].name} → ${routeNodes[to].name}`;
   hint.textContent = `${edge?.distance || "--"} 公尺，${getEdgeInstruction(from, to, edge, index)}`;
+  if (progressBar) progressBar.style.width = `${Math.round(((index + 1) / segmentCount) * 100)}%`;
+  if (guide) {
+    guide.classList.toggle("crossing", Boolean(edge?.crossing));
+    guide.classList.toggle("indoor", Boolean(edge?.indoor || edge?.covered || edge?.type === "indoor"));
+  }
   if (prevButton) prevButton.disabled = index === 0;
-  if (nextButton) nextButton.disabled = index === segmentCount - 1;
+  if (nextButton) {
+    const isLastSegment = index === segmentCount - 1;
+    nextButton.disabled = false;
+    nextButton.classList.toggle("finish", isLastSegment);
+    nextButton.innerHTML = isLastSegment
+      ? '<span>結束</span><span class="nav-step-icon" aria-hidden="true"></span>'
+      : '<span>下一段</span><span class="nav-step-icon" aria-hidden="true"></span>';
+  }
 }
 
 function getTurnHint(index) {
@@ -844,13 +962,13 @@ function showExploreDetail(id) {
   document.querySelector("#exploreSetStartBtn").addEventListener("click", () => {
     state.start = id;
     startSelect.value = id;
-    calculateAndRender();
+    calculateAndRender({ resetStep: true });
     showView("dashboard");
   });
   document.querySelector("#exploreSetEndBtn").addEventListener("click", () => {
     state.end = id;
     endSelect.value = id;
-    calculateAndRender();
+    calculateAndRender({ resetStep: true });
     showView("result");
   });
 }
@@ -875,7 +993,7 @@ function saveCurrentRoute() {
     startSelect.value = state.start;
     endSelect.value = state.end;
     setMode(item.querySelector("button").dataset.modeTarget);
-    calculateAndRender();
+    calculateAndRender({ resetStep: true });
     showView("result");
   });
   list.prepend(item);
